@@ -3,14 +3,21 @@ from django.conf import settings
 from django.conf.urls.static import static
 from . import views
 
-from .views import create_user , create_project , login_user , get_user_data , total_uers ,get_latest_project_data,latest_project_data , add_hardware , hardware_count , connected_hardware_count, Total_load
+from .views import create_user , create_project , login_user , get_user_data , total_uers ,get_latest_project_data,latest_project_data , add_hardware , hardware_count , connected_hardware_count, Total_load , Grid_history, Solar_history, Generator_history, Total_consumption
 from .views import user_project ,fetching_users , delete_user ,update_user , fetch_Hardware , update_hardware , delete_hardware , delete_selected_user, delete_selected_hardware , Create_Project_Manager ,Fetch_Projects,total_hardware_count,total_connected_hardware,total_project,fetches_total_hardware
 from .views import active_project , fetch_assigned_hardware, fetch_all_projects,logout_user, create_box , get_boxes,create_Gateways , fetch_gateway , fetch_value_data,fetch_device_data,fetch_whole_device_data,fetch_all_gateways,create_gateway,get_analyzers_by_gateway,create_analyzer,Get_Project_Manager,create_ports,fetch_ports,fetch_analyzers_by_port,get_all_gateways
 from .views import Get_All_Projects , get_unassigned_gateways,assign_gateways_to_user,fetch_gateways_of_user,fetch_gateways_of_usersList,assign_gateway_to_project,get_gateways_for_project,update_gateway,fetch_deployed_gateways_of_user,create_metadata,get_metadata,get_analyzer_value_data,get_total_gateways,get_deployed_gateways,get_user_aloted_gateways,post_metadata, fetch_metadata,fetch_highchart_data,analyzer_values,fetch_deployed_gateways_name_mac
 from .views import get_power_data, invoice_api, total_projecta, get_deployed_gateway_count, Get_superAdmin_Project_Count,fetch_single_highchart_data, edit_project_manager, sum_ep_plus_values, Grid_import, Solar_import, Generator_import, Grid_export, Solar_Project, Grid_export_project, Grid_Project, Generator_project
-from .views import total_admin, admin_detail, total_project_user, get_total_gateways_user, admin_detail_superadmin, create_or_update_subscription, create_admin, create_admincr, create_superadmincr, fetching_user, Get_User_Project_Count
+from .views import total_admin, admin_detail, total_project_user, get_total_gateways_user, admin_detail_superadmin, create_or_update_subscription, create_admin, create_admincr, create_superadmincr, fetching_user, Get_User_Project_Count, Load_Project, selected_analyzer_data, energy_import_export_last_10_days
 
 urlpatterns = [
+    path('fetch_ep_values/',  energy_import_export_last_10_days, name='energy_import_export_last_10_days'),
+    path('selected_analyzer_data/',  selected_analyzer_data, name='selected_analyzer_data'),
+    path('Load_Project/',  Load_Project, name='Load_Project'),
+    path('Total_consumption/', Total_consumption, name='Total_consumption'),
+    path('Generator_history/', Generator_history, name='Generator_history'),
+    path('Grid_history/', Grid_history, name='Grid_history'),
+    path('Solar_history/', Solar_history, name='Solar_history'),
     path('Total_load/', Total_load, name='Total_load'),
     path('Solar_project/', Solar_Project, name='Solar_Project'),
     path('Grid_project/', Grid_Project, name='Grid_Project'),
