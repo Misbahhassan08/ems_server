@@ -18,6 +18,7 @@ from datetime import timedelta
 from .models import Subscription, User
 from datetime import datetime, timedelta 
 from django.http import JsonResponse, HttpRequest
+from django.utils.timezone import make_aware
 import logging
 import base64
 from django.views import View
@@ -29,6 +30,56 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 # from django.core.files.uploadedfile import InMemoryUploadedFile
 # from django.core.files.storage import default_storage
 from .models import AnalyzerDetail
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def Last7Days_Energy_Summary(request):
+    try:
+        gateway_name = request.GET.get("gateway")
+        if not gateway_name:
+            return JsonResponse({"error": "Gateway name is required"}, status=400)
+
+        gateway = Gateways.objects.get(gateway_name=gateway_name)
+
+        types = ['Grid', 'Solar', 'Generator']
+        response_data = []
+
+        # Loop over the last 7 days
+        for day_offset in range(7):
+            day = datetime.now().date() - timedelta(days=day_offset)
+            start_of_day = make_aware(datetime.combine(day, datetime.min.time()))
+            end_of_day = make_aware(datetime.combine(day, datetime.max.time()))
+
+            daily_data = {"date": day.strftime("%Y-%m-%d")}
+
+            for analyzer_type in types:
+                analyzers = Analyzer.objects.filter(gateway=gateway, type=analyzer_type)
+                total = 0
+
+                for analyzer in analyzers:
+                    metadata_entries = MetaData.objects.filter(
+                        analyzer=analyzer,
+                        created_at__range=(start_of_day, end_of_day)
+                    )
+
+                    for entry in metadata_entries:
+                        for i in range(1, 21):
+                            name = getattr(entry, f"value{i}_name", "")
+                            if name == "EP+":
+                                value = getattr(entry, f"value{i}_value", None)
+                                try:
+                                    total += float(value)
+                                except (TypeError, ValueError):
+                                    continue
+
+                daily_data[f"{analyzer_type}_EP+"] = total
+
+            response_data.append(daily_data)
+
+        return JsonResponse(response_data, safe=False, status=200)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @api_view(['GET'])
@@ -693,37 +744,50 @@ def Generator_history(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Load_Project(request):
     try:
         project_id = request.GET.get("Project_id")
+        start_date_str = request.GET.get("start_date")
+        end_date_str = request.GET.get("end_date")
+
         if not project_id:
             return JsonResponse({"error": "Project ID is required"}, status=400)
+        if not start_date_str or not end_date_str:
+            return JsonResponse({"error": "Start date and end date are required"}, status=400)
 
-        # Step 1: Get all gateways for the project
+        # Parse dates
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"error": "Invalid date format. Use YYYY-MM-DD"}, status=400)
+
+        if start_date > end_date:
+            return JsonResponse({"error": "Start date cannot be after end date"}, status=400)
+
+        # Fetch gateways
         gateways = Gateways.objects.filter(project=project_id)
         if not gateways.exists():
             return JsonResponse({"error": "No gateways found for this project"}, status=404)
 
         mac_addresses = gateways.values_list('mac_address', flat=True)
 
-        # Step 2: Get analyzers by type
+        # Fetch analyzers by type
         analyzer_types = ['Solar', 'Grid', 'Generator']
         analyzers_by_type = {
             t: Analyzer.objects.filter(gateway__in=gateways, type=t)
             for t in analyzer_types
         }
 
-        # Step 3: Create result structure
+        # Prepare results
         results = {t: defaultdict(float) for t in analyzer_types}
-        today = timezone.now().date()
 
-        for days_ago in range(7):
-            day = today - timedelta(days=days_ago)
-            start_dt = timezone.make_aware(datetime.combine(day, datetime.min.time()))
-            end_dt = timezone.make_aware(datetime.combine(day, datetime.max.time()))
+        current_date = start_date
+        while current_date <= end_date:
+            start_dt = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
+            end_dt = timezone.make_aware(datetime.combine(current_date, datetime.max.time()))
 
             for t in analyzer_types:
                 for analyzer in analyzers_by_type[t]:
@@ -739,12 +803,14 @@ def Load_Project(request):
                             if name == "EP+":
                                 value = getattr(metadata, f"value{i}_value", None)
                                 try:
-                                    results[t][str(day)] += float(value)
+                                    results[t][str(current_date)] += float(value)
                                 except (TypeError, ValueError):
                                     continue
 
+            current_date += timedelta(days=1)
+
         return JsonResponse({
-            "EP+_Last_7_Days": {
+            "EP+_By_Date_Range": {
                 "Solar": results["Solar"],
                 "Grid": results["Grid"],
                 "Generator": results["Generator"]
@@ -753,7 +819,7 @@ def Load_Project(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-    
+
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
