@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 from rest_framework import permissions
 from django.db.models import Max
-
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 from datetime import datetime,timedelta
 from datetime import timedelta  
@@ -36,25 +36,40 @@ from .models import AnalyzerDetail
 def Last7Days_Energy_Summary(request):
     try:
         gateway_name = request.GET.get("gateway")
-        if not gateway_name:
-            return JsonResponse({"error": "Gateway name is required"}, status=400)
+        start_date_str = request.GET.get("start_date")
+        end_date_str = request.GET.get("end_date")
 
-        gateway = Gateways.objects.get(gateway_name=gateway_name)
+        if not gateway_name or not start_date_str or not end_date_str:
+            return JsonResponse({"error": "gateway, start_date, and end_date are required."}, status=400)
+
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"error": "Date format must be YYYY-MM-DD."}, status=400)
+
+        if start_date > end_date:
+            return JsonResponse({"error": "start_date must be earlier than or equal to end_date."}, status=400)
+
+        try:
+            gateway = Gateways.objects.get(gateway_name=gateway_name)
+        except Gateways.DoesNotExist:
+            return JsonResponse({"error": "Gateway not found."}, status=404)
 
         types = ['Grid', 'Solar', 'Generator']
         response_data = []
 
-        # Loop over the last 7 days
-        for day_offset in range(7):
-            day = datetime.now().date() - timedelta(days=day_offset)
-            start_of_day = make_aware(datetime.combine(day, datetime.min.time()))
-            end_of_day = make_aware(datetime.combine(day, datetime.max.time()))
+        current_day = start_date
+        while current_day <= end_date:
+            start_of_day = make_aware(datetime.combine(current_day, datetime.min.time()))
+            end_of_day = make_aware(datetime.combine(current_day, datetime.max.time()))
 
-            daily_data = {"date": day.strftime("%Y-%m-%d")}
+            daily_data = {"date": current_day.strftime("%Y-%m-%d")}
 
             for analyzer_type in types:
                 analyzers = Analyzer.objects.filter(gateway=gateway, type=analyzer_type)
-                total = 0
+                total_ep_plus = 0
+                total_ep_minus = 0  # Only used for Grid
 
                 for analyzer in analyzers:
                     metadata_entries = MetaData.objects.filter(
@@ -65,22 +80,30 @@ def Last7Days_Energy_Summary(request):
                     for entry in metadata_entries:
                         for i in range(1, 21):
                             name = getattr(entry, f"value{i}_name", "")
+                            value = getattr(entry, f"value{i}_value", None)
+
                             if name == "EP+":
-                                value = getattr(entry, f"value{i}_value", None)
                                 try:
-                                    total += float(value)
+                                    total_ep_plus += float(value)
+                                except (TypeError, ValueError):
+                                    continue
+                            elif name == "EP-" and analyzer_type == "Grid":
+                                try:
+                                    total_ep_minus += float(value)
                                 except (TypeError, ValueError):
                                     continue
 
-                daily_data[f"{analyzer_type}_EP+"] = total
+                daily_data[f"{analyzer_type}_EP+"] = total_ep_plus
+                if analyzer_type == "Grid":
+                    daily_data["Grid_EP-"] = total_ep_minus  # Only Grid gets EP-
 
             response_data.append(daily_data)
+            current_day += timedelta(days=1)
 
         return JsonResponse(response_data, safe=False, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -1394,21 +1417,40 @@ def logout_user(request):
 def selected_analyzer_data(request):
     try:
         analyzer_id = request.GET.get("analyzer_id")
-        if not analyzer_id:
-            return JsonResponse({"error": "Analyzer ID is required"}, status=400)
+        start_date_str = request.GET.get("start_date")
+        end_date_str = request.GET.get("end_date")
+
+        if not analyzer_id or not start_date_str or not end_date_str:
+            return JsonResponse({"error": "analyzer_id, start_date, and end_date are required."}, status=400)
+
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"error": "Date format must be YYYY-MM-DD."}, status=400)
+
+        if start_date > end_date:
+            return JsonResponse({"error": "start_date must be earlier than or equal to end_date."}, status=400)
 
         try:
             analyzer = Analyzer.objects.get(analyzer_id=analyzer_id)
         except Analyzer.DoesNotExist:
             return JsonResponse({"error": "Analyzer not found"}, status=404)
 
-        metadata_qs = MetaData.objects.filter(analyzer=analyzer)
+        # Filter metadata using aware datetime range
+        start_datetime = make_aware(datetime.combine(start_date, datetime.min.time()))
+        end_datetime = make_aware(datetime.combine(end_date, datetime.max.time()))
+
+        metadata_qs = MetaData.objects.filter(
+            analyzer=analyzer,
+            created_at__range=(start_datetime, end_datetime)
+        ).order_by('date')
 
         if not metadata_qs.exists():
-            return JsonResponse({"error": "No metadata found for this analyzer"}, status=404)
+            return JsonResponse({"error": "No metadata found for this analyzer in the selected date range"}, status=404)
 
-        first_date = metadata_qs.order_by('date').first().date
-        last_date = metadata_qs.order_by('-date').first().date
+        first_date = metadata_qs.first().date
+        last_date = metadata_qs.last().date
 
         metadata_list = []
         for meta in metadata_qs:
@@ -1434,8 +1476,6 @@ def selected_analyzer_data(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-    
-
 
 #inserting project values to database
 @api_view(['POST'])
@@ -1987,33 +2027,37 @@ def Create_Project_Manager(request):
 def Get_Project_Manager(request, user_id):     
     if request.method == 'GET':
         try:
-            # Use filter to retrieve all Project_Manager entries for the user_id
             project_managers = Project_Manager.objects.filter(user_id=user_id)
             
             if not project_managers.exists():
                 return JsonResponse({'error': 'Project Manager not found'}, status=404)
             
-            # List the project managers if multiple are returned
             response_data = []
             for project_manager in project_managers:
-                # Use the related_name 'gateways' to fetch connected gateways
                 connected_gateways = project_manager.gateways.all()
-                
-                # Prepare the gateway data
-                gateways_data = [
-                    {
+
+                gateways_data = []
+                for gateway in connected_gateways:
+                    # Fetch analyzers connected to this gateway
+                    analyzers = Analyzer.objects.filter(gateway=gateway)
+                    analyzers_data = [
+                        {
+                            'analyzer_id': analyzer.analyzer_id,
+                            'name': analyzer.name
+                        }
+                        for analyzer in analyzers
+                    ]
+
+                    gateways_data.append({
                         'G_id': gateway.G_id,
                         'gateway_name': gateway.gateway_name,
                         'mac_address': gateway.mac_address,
                         'status': gateway.status,
                         'deploy_status': gateway.deploy_status,
                         'config': gateway.config,
-                        # 'j_object': gateway.j_object,
-                    }
-                    for gateway in connected_gateways
-                ]
+                        'analyzers': analyzers_data  # Include analyzers under each gateway
+                    })
                 
-                # Append the project manager data to the response
                 response_data.append({
                     'PM_id': project_manager.PM_id,
                     'user_id': project_manager.user_id.user_id,
@@ -2022,7 +2066,7 @@ def Get_Project_Manager(request, user_id):
                     'latitude': str(project_manager.latitude),
                     'address': project_manager.address,
                     'is_active': project_manager.is_active,
-                    'connected_gateways': gateways_data  # Include connected gateways here
+                    'connected_gateways': gateways_data
                 })
             
             return JsonResponse({
@@ -2034,7 +2078,6 @@ def Get_Project_Manager(request, user_id):
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'message': 'Invalid request method'}, status=405)
-
 
 
 @api_view(['POST'])

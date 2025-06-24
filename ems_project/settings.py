@@ -116,8 +116,8 @@ WSGI_APPLICATION = "ems_project.wsgi.application"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 
-#for localhost
-#Get environment variables (these should be set in Cloud Run)
+# #for localhost
+# #Get environment variables (these should be set in Cloud Run)
 INSTANCE_CONNECTION_NAME = "myprojectems-435411:us-central1:emsdb"  # Format: project:region:instance
 DB_USER = "misbah"
 DB_PASS = "?5@1D9:lA_ex6p(%"
