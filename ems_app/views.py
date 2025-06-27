@@ -36,25 +36,18 @@ from .models import AnalyzerDetail
 def Last7Days_Energy_Summary(request):
     try:
         gateway_name = request.GET.get("gateway")
-        start_date_str = request.GET.get("start_date")
-        end_date_str = request.GET.get("end_date")
 
-        if not gateway_name or not start_date_str or not end_date_str:
-            return JsonResponse({"error": "gateway, start_date, and end_date are required."}, status=400)
-
-        try:
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return JsonResponse({"error": "Date format must be YYYY-MM-DD."}, status=400)
-
-        if start_date > end_date:
-            return JsonResponse({"error": "start_date must be earlier than or equal to end_date."}, status=400)
+        if not gateway_name:
+            return JsonResponse({"error": "gateway is required."}, status=400)
 
         try:
             gateway = Gateways.objects.get(gateway_name=gateway_name)
         except Gateways.DoesNotExist:
             return JsonResponse({"error": "Gateway not found."}, status=404)
+
+        # Auto-calculate the last 7 days: today and 6 previous days
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=6)
 
         types = ['Grid', 'Solar', 'Generator']
         response_data = []
@@ -95,7 +88,7 @@ def Last7Days_Energy_Summary(request):
 
                 daily_data[f"{analyzer_type}_EP+"] = total_ep_plus
                 if analyzer_type == "Grid":
-                    daily_data["Grid_EP-"] = total_ep_minus  # Only Grid gets EP-
+                    daily_data["Grid_EP-"] = total_ep_minus
 
             response_data.append(daily_data)
             current_day += timedelta(days=1)
