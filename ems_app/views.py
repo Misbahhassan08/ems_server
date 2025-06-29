@@ -31,6 +31,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 # from django.core.files.storage import default_storage
 from .models import AnalyzerDetail
 
+
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Last7Days_Energy_Summary(request):
@@ -1823,44 +1825,31 @@ def delete_user(request , user_id):
     return JsonResponse({'error' : 'invalid request method'}, status = 405)
             
 
-#for updating user
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def update_user(request, user_id):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            
-            # Debugging
-            print("Update data:", data)
-            
-            user = get_object_or_404(User, user_id=user_id)
-            
-            user.firstname = data.get('firstname', user.firstname)
-            user.lastname = data.get('lastname', user.lastname)
-            user.email = data.get('email', user.email)
-            user.contact = data.get('contact', user.contact)
-            user.role = data.get('role', user.role)
-            user.adress = data.get('adress', user.adress)
-            user.zip_code = data.get('zip_code' , user.zip_code)
-            user.password = data.get('password',user.password)
-            user.image = data.get('image', user.image)
-            
-            # Debugging
-            print("User before save:", user)
-            
-            user.save()
-            
-            return JsonResponse({'message': 'User updated successfully'}, status=200)
-        
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-        except ValueError as e:
-            return JsonResponse({'error': str(e)}, status=400)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-    
-    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+    try:
+        data = json.loads(request.body)
+        user = get_object_or_404(User, user_id=user_id)
+
+        user.firstname = data.get('firstname', user.firstname)
+        user.lastname = data.get('lastname', user.lastname)
+        user.email = data.get('email', user.email)
+        user.contact = data.get('contact', user.contact)
+        user.role = data.get('role', user.role)
+        user.adress = data.get('adress', user.adress)
+        user.zip_code = data.get('zip_code', user.zip_code)
+        user.password = data.get('password', user.password)
+        user.image = data.get('image', user.image)
+
+        created_by_id = data.get('created_by')
+        if created_by_id:
+            user.created_by = User.objects.get(user_id=created_by_id)
+
+        user.save()
+        return JsonResponse({'message': 'User updated successfully', 'user_id': user.user_id}, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 #for fetching hardware
@@ -4173,41 +4162,23 @@ def admin_detail_superadmin(request):
 def create_admin(request):
     if request.method == 'POST':
         try:
-            # Parse request data
             data = json.loads(request.body)
-            print('User Creation', data)
 
-            # Get the required fields
             firstname = data.get('firstname')
             lastname = data.get('lastname')
             email = data.get('email')
             password = data.get('password')
             contact = data.get('contact')
-            role = data.get('role', 'admin')
+            role = data.get('role', 'user')
             is_online = data.get('is_online', False)
             adress = data.get('adress')
             zip_code = data.get('zip_code')
-            image_base64 = data.get('image')
+            image = data.get('image')
+            created_by_id = data.get('created_by')
 
-            # Check if all required fields are provided
-            if not all([firstname, lastname, email, contact, password, adress, zip_code]):
-                return JsonResponse({'error': 'All required fields must be provided.'}, status=400)
+            if not all([firstname, lastname, email, password, contact]):
+                return JsonResponse({'error': 'Missing required fields.'}, status=400)
 
-            # Validate the role
-            if role not in dict(User.ROLES):
-                return JsonResponse({'error': 'Invalid role.'}, status=400)
-
-            # Handle image data
-            # image_data = None
-            # if image_base64:
-            #     try:
-            #         if image_base64.startswith('data:image'):
-            #             image_base64 = image_base64.split(',')[1]
-            #         image_data = base64.b64decode(image_base64)
-            #     except (TypeError, ValueError):
-            #         return JsonResponse({'error': 'Invalid image data.'}, status=400)
-
-            # Create the user
             user = User(
                 firstname=firstname,
                 lastname=lastname,
@@ -4217,33 +4188,32 @@ def create_admin(request):
                 role=role,
                 adress=adress,
                 zip_code=zip_code,
-                image=image_data,
+                image=image,
                 is_online=is_online
             )
+
+            if created_by_id:
+                try:
+                    creator = User.objects.get(user_id=created_by_id)
+                    user.created_by = creator
+                except User.DoesNotExist:
+                    return JsonResponse({'error': 'Creator user not found.'}, status=404)
+
             user.save()
 
-            # Return success response with user data
             return JsonResponse({
-                'id': user.user_id,
+                'user_id': user.user_id,
                 'firstname': user.firstname,
                 'lastname': user.lastname,
                 'email': user.email,
-                'contact': user.contact,
                 'role': user.role,
-                'adress': user.adress,
-                'zip_code': user.zip_code,
-                'unique_key': user.unique_key,
-                'is_online': user.is_online,
-                'message': 'User created successfully.',
+                'message': 'User created successfully.'
             }, status=201)
 
         except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON data.'}, status=400)
+            return JsonResponse({'error': 'Invalid JSON.'}, status=400)
         except Exception as e:
-            return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)
-
-    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
-
+            return JsonResponse({'error': str(e)}, status=500)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -4265,3 +4235,43 @@ def fetching_user(request):
             'role', 'adress', 'zip_code', 'is_online', 'image', 'password'
         )
         return JsonResponse(list(users), safe=False)
+    
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def assign_user_to_admin(request):
+    try:
+        data = json.loads(request.body)
+        admin_id = data.get('admin_id')
+        user_id = data.get('user_id')
+
+        if not admin_id or not user_id:
+            return JsonResponse({'error': 'admin_id and user_id are required.'}, status=400)
+
+        admin = User.objects.get(user_id=admin_id, role='admin')
+        user = User.objects.get(user_id=user_id)
+
+        user.created_by = admin
+        user.save()
+
+        return JsonResponse({'message': f'User {user.firstname} assigned to Admin {admin.firstname}.'}, status=200)
+
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User or Admin not found.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_unassigned_users(request):
+    users = User.objects.filter(created_by__isnull=True, role='user')
+    user_list = [{
+        'user_id': u.user_id,
+        'firstname': u.firstname,
+        'lastname': u.lastname,
+        'email': u.email,
+        'contact': u.contact,
+        'role': u.role
+    } for u in users]
+    return JsonResponse({'unassigned_users': user_list}, safe=False)
