@@ -1825,6 +1825,12 @@ def delete_user(request , user_id):
     return JsonResponse({'error' : 'invalid request method'}, status = 405)
             
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_admin_users(request):
+    admins = User.objects.filter(role='admin').values('user_id', 'firstname', 'lastname', 'email')
+    return JsonResponse({'admins': list(admins)}, safe=False)
+
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def update_user(request, user_id):
@@ -1842,17 +1848,22 @@ def update_user(request, user_id):
         user.password = data.get('password', user.password)
         user.image = data.get('image', user.image)
 
-        created_by_id = data.get('created_by')
+        # ✅ Fix here: get 'created_by_id' from frontend payload
+        created_by_id = data.get('created_by_id')
         if created_by_id:
-            user.created_by = User.objects.get(user_id=created_by_id)
+            admin_user = User.objects.filter(user_id=created_by_id, role='admin').first()
+            if admin_user:
+                user.created_by = admin_user
 
         user.save()
+
         return JsonResponse({'message': 'User updated successfully', 'user_id': user.user_id}, status=200)
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-
 #for fetching hardware
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def fetch_Hardware(request, user_id):
