@@ -210,18 +210,7 @@ class MetaData(models.Model):
 
 
 
-class AnalyzerDetail(models.Model):
-    metadata = models.ForeignKey(MetaData, on_delete=models.CASCADE, related_name='details')
-    analyzer = models.ForeignKey(Analyzer, on_delete=models.CASCADE, related_name='details')
-    gateway = models.ForeignKey(Gateways, on_delete=models.CASCADE, related_name='details')
-    mac_address = models.CharField(max_length=60)
 
-    name = models.CharField(max_length=100)  # e.g., EP+, EP-, Active Power
-    value = models.FloatField()
-    unit = models.CharField(max_length=50, blank=True, null=True)
-    timestamp = models.DateTimeField()
-
-    
 class Subscription(models.Model):
     sub_id = models.AutoField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)

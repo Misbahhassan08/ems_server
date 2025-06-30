@@ -29,7 +29,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 # from django.core.files.uploadedfile import InMemoryUploadedFile
 # from django.core.files.storage import default_storage
-from .models import AnalyzerDetail
+
 
 
 
