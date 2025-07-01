@@ -32,6 +32,37 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def create_superadmin(request):
+    try:
+        data = json.loads(request.body)
+
+        # Validation
+        required_fields = ['firstname', 'lastname', 'email', 'contact', 'password']
+        for field in required_fields:
+            if not data.get(field):
+                return JsonResponse({'error': f'{field} is required'}, status=400)
+
+        # Create new superadmin
+        user = User.objects.create(
+            firstname=data['firstname'],
+            lastname=data['lastname'],
+            email=data['email'],
+            contact=data['contact'],
+            password=data['password'],  # In production, use make_password()
+            role='superadmin',
+            adress=data.get('adress', ''),
+            zip_code=data.get('zip_code', ''),
+            image=data.get('image', ''),
+            is_online=data.get('is_online', False)
+        )
+
+        return JsonResponse({'message': 'Superadmin created successfully', 'user_id': user.user_id}, status=201)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])

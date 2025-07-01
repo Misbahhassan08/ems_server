@@ -11,6 +11,7 @@ from .views import get_power_data, invoice_api, total_projecta, get_deployed_gat
 from .views import total_admin, admin_detail, total_project_user, get_total_gateways_user, admin_detail_superadmin, create_or_update_subscription, create_admin, create_admincr, create_superadmincr, fetching_user, Get_User_Project_Count, Load_Project, selected_analyzer_data, energy_import_export_last_10_days
 from .views import  get_unassigned_users, assign_user_to_admin, get_admin_users
 urlpatterns = [
+    path('create-superadmin/', views.create_superadmin),
     path('admins/', get_admin_users, name='get_admin_users'),
     path('unassigned-users/', get_unassigned_users, name='get_unassigned_users'),
     path('assign-user/', assign_user_to_admin, name='assign_user_to_admin'),
