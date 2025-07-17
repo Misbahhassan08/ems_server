@@ -11,8 +11,7 @@ from .views import get_power_data, invoice_api, total_projecta, get_deployed_gat
 from .views import total_admin, admin_detail, total_project_user, get_total_gateways_user, admin_detail_superadmin, create_or_update_subscription, create_admin, create_admincr, create_superadmincr, fetching_user, Get_User_Project_Count, Load_Project, selected_analyzer_data, energy_import_export_last_10_days
 from .views import  get_unassigned_users, assign_user_to_admin, get_admin_users
 urlpatterns = [
-    path('create-superadmin/', views.create_superadmin),
-    path('admins/', get_admin_users, name='get_admin_users'),
+     path('admins/', get_admin_users, name='get_admin_users'),
     path('unassigned-users/', get_unassigned_users, name='get_unassigned_users'),
     path('assign-user/', assign_user_to_admin, name='assign_user_to_admin'),
     path('Energy_Summary/',  Last7Days_Energy_Summary, name='Last7Days_Energy_Summary'),
@@ -35,7 +34,7 @@ urlpatterns = [
      path('api/ep_plus_sum/', sum_ep_plus_values, name='sum_ep_plus_values'),
     path('create_user/<int:users_id>/', create_user, name='create_user'),
     path('create_project/',create_project , name='create_project'),
-    path('get_latest_project_data/',get_latest_project_data, name='get_latest_project_data'),
+    path('get_latest_project_data/',get_latest_project_data, name='get_l   atest_project_data'),
     path('login_user/', login_user , name='login_user'),
     path('user_data/', get_user_data , name='get_user_data'),
     path('user_count/', total_uers , name='total_uers'),

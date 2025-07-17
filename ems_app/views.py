@@ -240,35 +240,49 @@ def Grid_import(request):
         if not gateway_name:
             return JsonResponse({"error": "Gateway name is required"}, status=400)
 
-        # Get the gateway
         gateway = Gateways.objects.get(gateway_name=gateway_name)
-
-        # Filter analyzers by gateway and type 'Grid'
         analyzers = Analyzer.objects.filter(gateway=gateway, type='Grid')
 
-        total_sum = 0
+        current_total = 0.0
+        previous_total = 0.0
 
-        # For each analyzer, get the latest MetaData
         for analyzer in analyzers:
-            latest_metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
-            if not latest_metadata:
+            # Get latest and second latest metadata records
+            metadata_qs = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at')[:2]
+
+            if metadata_qs.count() == 0:
                 continue
 
-            # Look for EP+ in value1_name to value20_name
+            # Latest metadata
+            latest_metadata = metadata_qs[0]
+            # Previous metadata (if exists)
+            previous_metadata = metadata_qs[1] if len(metadata_qs) > 1 else None
+
             for i in range(1, 21):
                 name = getattr(latest_metadata, f"value{i}_name", None)
                 if name == "EP+":
-                    value = getattr(latest_metadata, f"value{i}_value", None)
                     try:
-                        total_sum += float(value)
+                        value = float(getattr(latest_metadata, f"value{i}_value", 0))
+                        current_total += value
                     except (TypeError, ValueError):
-                        continue  # Skip invalid or missing values
+                        continue
 
-        return JsonResponse({"EP+_total_sum": total_sum}, status=200)
+                if previous_metadata:
+                    prev_name = getattr(previous_metadata, f"value{i}_name", None)
+                    if prev_name == "EP+":
+                        try:
+                            prev_value = float(getattr(previous_metadata, f"value{i}_value", 0))
+                            previous_total += prev_value
+                        except (TypeError, ValueError):
+                            continue
+
+        delta = current_total - previous_total
+        return JsonResponse({
+            "EP+_total_sum": delta
+        }, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Solar_import(request):
@@ -280,29 +294,45 @@ def Solar_import(request):
         # Get the gateway
         gateway = Gateways.objects.get(gateway_name=gateway_name)
 
-        # Filter analyzers by gateway and type 'Grid'
+        # Filter analyzers by gateway and type 'Solar'
         analyzers = Analyzer.objects.filter(gateway=gateway, type='Solar')
-        total_sum = 0
 
- 
+        current_total = 0.0
+        previous_total = 0.0
 
-        # ✅ Step 2: For each analyzer, get latest MetaData
+        # For each analyzer, get the latest and previous MetaData
         for analyzer in analyzers:
-            latest_metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
-            if not latest_metadata:
+            metadata_qs = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at')[:2]
+
+            if metadata_qs.count() == 0:
                 continue
 
-            # ✅ Step 3: Look for EP+ in value1_name to value20_name
+            latest_metadata = metadata_qs[0]
+            previous_metadata = metadata_qs[1] if len(metadata_qs) > 1 else None
+
             for i in range(1, 21):
                 name = getattr(latest_metadata, f"value{i}_name", None)
                 if name == "EP+":
-                    value = getattr(latest_metadata, f"value{i}_value", None)
                     try:
-                        total_sum += float(value)
+                        value = float(getattr(latest_metadata, f"value{i}_value", 0))
+                        current_total += value
                     except (TypeError, ValueError):
-                        continue  # Skip invalid or missing values
+                        continue
 
-        return JsonResponse({"Total_Solar": total_sum}, status=200)
+                if previous_metadata:
+                    prev_name = getattr(previous_metadata, f"value{i}_name", None)
+                    if prev_name == "EP+":
+                        try:
+                            prev_value = float(getattr(previous_metadata, f"value{i}_value", 0))
+                            previous_total += prev_value
+                        except (TypeError, ValueError):
+                            continue
+
+        delta = current_total - previous_total
+
+        return JsonResponse({
+            "Total_Solar": delta
+        }, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
