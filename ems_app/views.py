@@ -78,12 +78,15 @@ def Last7Days_Energy_Summary(request):
         except Gateways.DoesNotExist:
             return JsonResponse({"error": "Gateway not found."}, status=404)
 
-        # Auto-calculate the last 7 days: today and 6 previous days
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=6)
 
         types = ['Grid', 'Solar', 'Generator']
         response_data = []
+
+        previous_values = {
+            analyzer_type: {"EP+": 0.0, "EP-": 0.0} for analyzer_type in types
+        }
 
         current_day = start_date
         while current_day <= end_date:
@@ -94,34 +97,45 @@ def Last7Days_Energy_Summary(request):
 
             for analyzer_type in types:
                 analyzers = Analyzer.objects.filter(gateway=gateway, type=analyzer_type)
-                total_ep_plus = 0
-                total_ep_minus = 0  # Only used for Grid
+
+                ep_plus_today = 0.0
+                ep_minus_today = 0.0  # Only for Grid
 
                 for analyzer in analyzers:
-                    metadata_entries = MetaData.objects.filter(
+                    last_entry = MetaData.objects.filter(
                         analyzer=analyzer,
                         created_at__range=(start_of_day, end_of_day)
-                    )
+                    ).order_by('-created_at').first()
 
-                    for entry in metadata_entries:
-                        for i in range(1, 21):
-                            name = getattr(entry, f"value{i}_name", "")
-                            value = getattr(entry, f"value{i}_value", None)
+                    if not last_entry:
+                        continue
 
-                            if name == "EP+":
-                                try:
-                                    total_ep_plus += float(value)
-                                except (TypeError, ValueError):
-                                    continue
-                            elif name == "EP-" and analyzer_type == "Grid":
-                                try:
-                                    total_ep_minus += float(value)
-                                except (TypeError, ValueError):
-                                    continue
+                    for i in range(1, 21):
+                        name = getattr(last_entry, f"value{i}_name", "")
+                        value = getattr(last_entry, f"value{i}_value", None)
 
-                daily_data[f"{analyzer_type}_EP+"] = total_ep_plus
+                        if name == "EP+":
+                            try:
+                                ep_plus_today += float(value)
+                            except (TypeError, ValueError):
+                                continue
+                        elif name == "EP-" and analyzer_type == "Grid":
+                            try:
+                                ep_minus_today += float(value)
+                            except (TypeError, ValueError):
+                                continue
+
+                # Calculate deltas (current - previous)
+                ep_plus_delta = ep_plus_today - previous_values[analyzer_type]["EP+"]
+                daily_data[f"{analyzer_type}_EP+"] = round(ep_plus_delta, 2)
+
+                # Update previous
+                previous_values[analyzer_type]["EP+"] = ep_plus_today
+
                 if analyzer_type == "Grid":
-                    daily_data["Grid_EP-"] = total_ep_minus
+                    ep_minus_delta = ep_minus_today - previous_values["Grid"]["EP-"]
+                    daily_data["Grid_EP-"] = round(ep_minus_delta, 2)
+                    previous_values["Grid"]["EP-"] = ep_minus_today
 
             response_data.append(daily_data)
             current_day += timedelta(days=1)
@@ -283,6 +297,7 @@ def Grid_import(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Solar_import(request):
