@@ -693,6 +693,50 @@ def Total_load(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
+def Total_consumption_activepower(request):
+    try:
+        gateway_name = request.GET.get("gateway")
+        if not gateway_name:
+            return JsonResponse({"error": "Gateway name is required"}, status=400)
+
+        # Get the gateway
+        gateway = Gateways.objects.get(gateway_name=gateway_name)
+        analyzer_types = ['Grid', 'Generator', 'Solar']
+        analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
+
+        results = {
+            "Grid": {"total": 0.0, "values": []},
+            "Generator": {"total": 0.0, "values": []},
+            "Solar": {"total": 0.0, "values": []},
+        }
+
+        for analyzer in analyzers:
+            latest_metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
+
+            if latest_metadata:
+                for i in range(1, 21):
+                    name = getattr(latest_metadata, f"value{i}_name", None)
+                    if name and name.lower() == "active power":
+                        value = getattr(latest_metadata, f"value{i}_value", None)
+                        try:
+                            float_value = float(value)
+                            results[analyzer.type]["values"].append({
+                                "analyzer": analyzer.name,
+                                "value": float_value,
+                                "time": latest_metadata.created_at.isoformat()
+                            })
+                            results[analyzer.type]["total"] += float_value
+                        except (TypeError, ValueError):
+                            continue
+                        break  # Found "active power", no need to check other value{i}
+
+        return JsonResponse({"latest_active_power": results}, status=200)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
 def Total_consumption(request):
     try:
         gateway_name = request.GET.get("gateway")

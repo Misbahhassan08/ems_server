@@ -9,7 +9,7 @@ from .views import active_project , fetch_assigned_hardware, fetch_all_projects,
 from .views import Get_All_Projects , get_unassigned_gateways,assign_gateways_to_user,fetch_gateways_of_user,fetch_gateways_of_usersList,assign_gateway_to_project,get_gateways_for_project,update_gateway,fetch_deployed_gateways_of_user,create_metadata,get_metadata,get_analyzer_value_data,get_total_gateways,get_deployed_gateways,get_user_aloted_gateways,post_metadata, fetch_metadata,fetch_highchart_data,analyzer_values,fetch_deployed_gateways_name_mac
 from .views import get_power_data, invoice_api, total_projecta, get_deployed_gateway_count, Get_superAdmin_Project_Count,fetch_single_highchart_data, edit_project_manager, sum_ep_plus_values, Grid_import, Solar_import, Generator_import, Grid_export, Solar_Project, Grid_export_project, Grid_Project, Generator_project
 from .views import total_admin, admin_detail, total_project_user, get_total_gateways_user, admin_detail_superadmin, create_or_update_subscription, create_admin, create_admincr, create_superadmincr, fetching_user, Get_User_Project_Count, Load_Project, selected_analyzer_data, energy_import_export_last_10_days
-from .views import  get_unassigned_users, assign_user_to_admin, get_admin_users
+from .views import  get_unassigned_users, assign_user_to_admin, get_admin_users, Total_consumption_activepower
 urlpatterns = [
      path('admins/', get_admin_users, name='get_admin_users'),
     path('unassigned-users/', get_unassigned_users, name='get_unassigned_users'),
@@ -19,6 +19,7 @@ urlpatterns = [
     path('selected_analyzer_data/',  selected_analyzer_data, name='selected_analyzer_data'),
     path('Load_Project/',  Load_Project, name='Load_Project'),
     path('Total_consumption/', Total_consumption, name='Total_consumption'),
+    path('Total_activepower/',  Total_consumption_activepower, name=' Total_consumption_activepower'),
     path('Generator_history/', Generator_history, name='Generator_history'),
     path('Grid_history/', Grid_history, name='Grid_history'),
     path('Solar_history/', Solar_history, name='Solar_history'),
