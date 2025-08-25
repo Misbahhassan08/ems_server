@@ -84,27 +84,28 @@ def Last7Days_Energy_Summary(request):
         types = ['Grid', 'Solar', 'Generator']
         response_data = []
 
-        previous_values = {
-            analyzer_type: {"EP+": 0.0, "EP-": 0.0} for analyzer_type in types
-        }
+        # Store last values of each day
+        daily_last_values = {}
+        last_known_values = {f"{t}_EP+": 0.0 for t in types}
+        last_known_values["Grid_EP-"] = 0.0
 
         current_day = start_date
         while current_day <= end_date:
-            start_of_day = make_aware(datetime.combine(current_day, datetime.min.time()))
             end_of_day = make_aware(datetime.combine(current_day, datetime.max.time()))
 
-            daily_data = {"date": current_day.strftime("%Y-%m-%d")}
+            daily_last_values[current_day.strftime("%Y-%m-%d")] = {}
 
             for analyzer_type in types:
                 analyzers = Analyzer.objects.filter(gateway=gateway, type=analyzer_type)
 
-                ep_plus_today = 0.0
-                ep_minus_today = 0.0  # Only for Grid
+                ep_plus_last = None
+                ep_minus_last = None  # Only for Grid
 
                 for analyzer in analyzers:
+                    # ✅ Get the last entry up to 23:59 (or earlier if missing)
                     last_entry = MetaData.objects.filter(
                         analyzer=analyzer,
-                        created_at__range=(start_of_day, end_of_day)
+                        created_at__lte=end_of_day
                     ).order_by('-created_at').first()
 
                     if not last_entry:
@@ -116,35 +117,59 @@ def Last7Days_Energy_Summary(request):
 
                         if name == "EP+":
                             try:
-                                ep_plus_today += float(value)
+                                ep_plus_last = (ep_plus_last or 0.0) + float(value)
                             except (TypeError, ValueError):
                                 continue
                         elif name == "EP-" and analyzer_type == "Grid":
                             try:
-                                ep_minus_today += float(value)
+                                ep_minus_last = (ep_minus_last or 0.0) + float(value)
                             except (TypeError, ValueError):
                                 continue
 
-                # Calculate deltas (current - previous)
-                ep_plus_delta = ep_plus_today - previous_values[analyzer_type]["EP+"]
-                daily_data[f"{analyzer_type}_EP+"] = round(ep_plus_delta, 2)
+                # If no entry found for today, use last known value
+                if ep_plus_last is None:
+                    ep_plus_last = last_known_values[f"{analyzer_type}_EP+"]
+                if analyzer_type == "Grid" and ep_minus_last is None:
+                    ep_minus_last = last_known_values["Grid_EP-"]
 
-                # Update previous
-                previous_values[analyzer_type]["EP+"] = ep_plus_today
+                # Store values
+                daily_last_values[current_day.strftime("%Y-%m-%d")][f"{analyzer_type}_EP+"] = ep_plus_last
+                last_known_values[f"{analyzer_type}_EP+"] = ep_plus_last
 
                 if analyzer_type == "Grid":
-                    ep_minus_delta = ep_minus_today - previous_values["Grid"]["EP-"]
-                    daily_data["Grid_EP-"] = round(ep_minus_delta, 2)
-                    previous_values["Grid"]["EP-"] = ep_minus_today
+                    daily_last_values[current_day.strftime("%Y-%m-%d")]["Grid_EP-"] = ep_minus_last
+                    last_known_values["Grid_EP-"] = ep_minus_last
+
+            current_day += timedelta(days=1)
+
+        # Now calculate deltas
+        previous_day_values = {f"{t}_EP+": 0.0 for t in types}
+        previous_day_values["Grid_EP-"] = 0.0
+
+        for day, values in daily_last_values.items():
+            daily_data = {"date": day}
+
+            for analyzer_type in types:
+                ep_plus_last = values.get(f"{analyzer_type}_EP+", 0.0)
+                delta_plus = ep_plus_last - previous_day_values[f"{analyzer_type}_EP+"]
+                daily_data[f"{analyzer_type}_EP+"] = round(delta_plus, 2)
+                previous_day_values[f"{analyzer_type}_EP+"] = ep_plus_last
+
+                if analyzer_type == "Grid":
+                    ep_minus_last = values.get("Grid_EP-", 0.0)
+                    delta_minus = ep_minus_last - previous_day_values["Grid_EP-"]
+                    daily_data["Grid_EP-"] = round(delta_minus, 2)
+                    previous_day_values["Grid_EP-"] = ep_minus_last
 
             response_data.append(daily_data)
-            current_day += timedelta(days=1)
 
         return JsonResponse(response_data, safe=False, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+
+        
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def energy_import_export_last_10_days(request):
@@ -298,6 +323,7 @@ def Grid_import(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Solar_import(request):
@@ -306,47 +332,48 @@ def Solar_import(request):
         if not gateway_name:
             return JsonResponse({"error": "Gateway name is required"}, status=400)
 
-        # Get the gateway
         gateway = Gateways.objects.get(gateway_name=gateway_name)
-
-        # Filter analyzers by gateway and type 'Solar'
         analyzers = Analyzer.objects.filter(gateway=gateway, type='Solar')
+
+        today = datetime.now().date()
+        yesterday = today - timedelta(days=1)
 
         current_total = 0.0
         previous_total = 0.0
 
-        # For each analyzer, get the latest and previous MetaData
         for analyzer in analyzers:
-            metadata_qs = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at')[:2]
+            # Current value (latest EP+ from today)
+            today_metadata = MetaData.objects.filter(
+                analyzer=analyzer,
+                created_at__date=today
+            ).order_by('-created_at').first()
 
-            if metadata_qs.count() == 0:
-                continue
+            # Previous value (latest EP+ from yesterday)
+            yesterday_metadata = MetaData.objects.filter(
+                analyzer=analyzer,
+                created_at__date=yesterday
+            ).order_by('-created_at').first()
 
-            latest_metadata = metadata_qs[0]
-            previous_metadata = metadata_qs[1] if len(metadata_qs) > 1 else None
-
-            for i in range(1, 21):
-                name = getattr(latest_metadata, f"value{i}_name", None)
-                if name == "EP+":
-                    try:
-                        value = float(getattr(latest_metadata, f"value{i}_value", 0))
-                        current_total += value
-                    except (TypeError, ValueError):
-                        continue
-
-                if previous_metadata:
-                    prev_name = getattr(previous_metadata, f"value{i}_name", None)
-                    if prev_name == "EP+":
+            if today_metadata:
+                for i in range(1, 21):
+                    if getattr(today_metadata, f"value{i}_name", None) == "EP+":
                         try:
-                            prev_value = float(getattr(previous_metadata, f"value{i}_value", 0))
-                            previous_total += prev_value
+                            current_total += float(getattr(today_metadata, f"value{i}_value", 0))
                         except (TypeError, ValueError):
-                            continue
+                            pass
+
+            if yesterday_metadata:
+                for i in range(1, 21):
+                    if getattr(yesterday_metadata, f"value{i}_name", None) == "EP+":
+                        try:
+                            previous_total += float(getattr(yesterday_metadata, f"value{i}_value", 0))
+                        except (TypeError, ValueError):
+                            pass
 
         delta = current_total - previous_total
 
         return JsonResponse({
-            "Total_Solar": delta
+            "Total_Solar": round(delta, 2)
         }, status=200)
 
     except Exception as e:
@@ -735,6 +762,8 @@ def Total_consumption_activepower(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Total_consumption(request):
@@ -750,39 +779,34 @@ def Total_consumption(request):
         analyzer_types = ['Grid', 'Generator', 'Solar']
         analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
 
-        now = timezone.now()
-        past_24_hours = now - timedelta(hours=24)
-
         results = {
-            "Grid": [],
-            "Generator": [],
-            "Solar": []
+            "Grid": None,
+            "Generator": None,
+            "Solar": None
         }
 
         for analyzer in analyzers:
-            metadata_entries = MetaData.objects.filter(
-                analyzer=analyzer,
-                created_at__gte=past_24_hours
-            ).order_by('-created_at')
+            # Get the latest MetaData entry for this analyzer
+            metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
 
-            for metadata in metadata_entries:
+            if metadata:
                 for i in range(1, 21):
                     name = getattr(metadata, f"value{i}_name", None)
                     if name and name.lower() == "active power":
                         value = getattr(metadata, f"value{i}_value", None)
                         try:
-                            results[analyzer.type].append({
+                            results[analyzer.type] = {
                                 "time": metadata.created_at.isoformat(),
                                 "value": float(value)
-                            })
+                            }
                         except (TypeError, ValueError):
                             continue
+                        break  # No need to check more fields once active power is found
 
-        return JsonResponse({"active_power_last_24_hours": results}, status=200)
+        return JsonResponse({"latest_active_power": results}, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 
 
 
