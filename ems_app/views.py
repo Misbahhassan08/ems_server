@@ -785,17 +785,16 @@ def Total_consumption(request):
             "Solar": []
         }
 
-        # Get start and end of current day
+        # Rolling last 24 hours (from now - 24h to now)
         now = datetime.now()
-        start_of_day = make_aware(datetime(now.year, now.month, now.day, 0, 0, 0))
-        end_of_day = start_of_day + timedelta(days=1)
+        start_time = make_aware(now - timedelta(hours=24))
 
         for analyzer in analyzers:
-            # Filter metadata only for today
+            # Filter metadata only in last 24h
             metadata_qs = MetaData.objects.filter(
                 analyzer=analyzer,
-                created_at__gte=start_of_day,
-                created_at__lt=end_of_day
+                created_at__gte=start_time,
+                created_at__lte=make_aware(now)
             ).order_by("created_at")
 
             for metadata in metadata_qs:
@@ -810,13 +809,12 @@ def Total_consumption(request):
                             })
                         except (TypeError, ValueError):
                             continue
-                        break  # Stop checking more fields once active power is found
+                        break  # Stop checking once active power found
 
-        return JsonResponse({"today_active_power": results}, status=200)
+        return JsonResponse({"active_power_last_24_hours": results}, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
