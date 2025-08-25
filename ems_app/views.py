@@ -780,34 +780,42 @@ def Total_consumption(request):
         analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
 
         results = {
-            "Grid": None,
-            "Generator": None,
-            "Solar": None
+            "Grid": [],
+            "Generator": [],
+            "Solar": []
         }
 
-        for analyzer in analyzers:
-            # Get the latest MetaData entry for this analyzer
-            metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
+        # Get start and end of current day
+        now = datetime.now()
+        start_of_day = make_aware(datetime(now.year, now.month, now.day, 0, 0, 0))
+        end_of_day = start_of_day + timedelta(days=1)
 
-            if metadata:
+        for analyzer in analyzers:
+            # Filter metadata only for today
+            metadata_qs = MetaData.objects.filter(
+                analyzer=analyzer,
+                created_at__gte=start_of_day,
+                created_at__lt=end_of_day
+            ).order_by("created_at")
+
+            for metadata in metadata_qs:
                 for i in range(1, 21):
                     name = getattr(metadata, f"value{i}_name", None)
                     if name and name.lower() == "active power":
                         value = getattr(metadata, f"value{i}_value", None)
                         try:
-                            results[analyzer.type] = {
+                            results[analyzer.type].append({
                                 "time": metadata.created_at.isoformat(),
                                 "value": float(value)
-                            }
+                            })
                         except (TypeError, ValueError):
                             continue
-                        break  # No need to check more fields once active power is found
+                        break  # Stop checking more fields once active power is found
 
-        return JsonResponse({"latest_active_power": results}, status=200)
+        return JsonResponse({"today_active_power": results}, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 
 
 @api_view(['GET'])
