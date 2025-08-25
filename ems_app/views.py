@@ -785,16 +785,17 @@ def Total_consumption(request):
             "Solar": []
         }
 
-        # Rolling last 24 hours (from now - 24h to now)
+        # Present day filter (midnight today → now)
         now = datetime.now()
-        start_time = make_aware(now - timedelta(hours=24))
+        start_of_day = make_aware(datetime(now.year, now.month, now.day, 0, 0, 0))
+        end_of_day = make_aware(now)
 
         for analyzer in analyzers:
-            # Filter metadata only in last 24h
+            # Filter metadata only for today
             metadata_qs = MetaData.objects.filter(
                 analyzer=analyzer,
-                created_at__gte=start_time,
-                created_at__lte=make_aware(now)
+                created_at__gte=start_of_day,
+                created_at__lte=end_of_day
             ).order_by("created_at")
 
             for metadata in metadata_qs:
@@ -811,11 +812,10 @@ def Total_consumption(request):
                             continue
                         break  # Stop checking once active power found
 
-        return JsonResponse({"active_power_last_24_hours": results}, status=200)
+        return JsonResponse({"today_active_power": results}, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Grid_history(request):
