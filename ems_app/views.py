@@ -732,6 +732,53 @@ def Total_consumption_activepower(request):
         analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
 
         results = {
+            "Grid": {"total": 0.0, "values": []},
+            "Generator": {"total": 0.0, "values": []},
+            "Solar": {"total": 0.0, "values": []},
+        }
+
+        for analyzer in analyzers:
+            latest_metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
+
+            if latest_metadata:
+                for i in range(1, 21):
+                    name = getattr(latest_metadata, f"value{i}_name", None)
+                    if name and name.lower() == "active power":
+                        value = getattr(latest_metadata, f"value{i}_value", None)
+                        try:
+                            float_value = float(value)
+                            results[analyzer.type]["values"].append({
+                                "analyzer": analyzer.name,
+                                "value": float_value,
+                                "time": latest_metadata.created_at.isoformat()
+                            })
+                            results[analyzer.type]["total"] += float_value
+                        except (TypeError, ValueError):
+                            continue
+                        break  # Found "active power", no need to check other value{i}
+
+        return JsonResponse({"latest_active_power": results}, status=200)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def Total_consumption(request):
+    try:
+        gateway_name = request.GET.get("gateway")
+        if not gateway_name:
+            return JsonResponse({"error": "Gateway name is required"}, status=400)
+
+        # Get the gateway
+        gateway = Gateways.objects.get(gateway_name=gateway_name)
+        analyzer_types = ['Grid', 'Generator', 'Solar']
+        analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
+
+        results = {
             "Grid": {},
             "Generator": {},
             "Solar": {}
@@ -774,60 +821,6 @@ def Total_consumption_activepower(request):
             ]
 
         return JsonResponse({"today_active_power": formatted_results}, status=200)
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.AllowAny])
-def Total_consumption(request):
-    try:
-        gateway_name = request.GET.get("gateway")
-        if not gateway_name:
-            return JsonResponse({"error": "Gateway name is required"}, status=400)
-
-        # Get the gateway
-        gateway = Gateways.objects.get(gateway_name=gateway_name)
-
-        # Filter analyzers by gateway and type Grid, Generator, or Solar
-        analyzer_types = ['Grid', 'Generator', 'Solar']
-        analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
-
-        results = {
-            "Grid": [],
-            "Generator": [],
-            "Solar": []
-        }
-
-        # Present day filter (midnight today → now)
-        now = datetime.now()
-        start_of_day = make_aware(datetime(now.year, now.month, now.day, 0, 0, 0))
-        end_of_day = make_aware(now)
-
-        for analyzer in analyzers:
-            # Filter metadata only for today
-            metadata_qs = MetaData.objects.filter(
-                analyzer=analyzer,
-                created_at__gte=start_of_day,
-                created_at__lte=end_of_day
-            ).order_by("created_at")
-
-            for metadata in metadata_qs:
-                for i in range(1, 21):
-                    name = getattr(metadata, f"value{i}_name", None)
-                    if name and name.lower() == "active power":
-                        value = getattr(metadata, f"value{i}_value", None)
-                        try:
-                            results[analyzer.type].append({
-                                "time": metadata.created_at.isoformat(),
-                                "value": float(value)
-                            })
-                        except (TypeError, ValueError):
-                            continue
-                        break  # Stop checking once active power found
-
-        return JsonResponse({"today_active_power": results}, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
