@@ -732,36 +732,51 @@ def Total_consumption_activepower(request):
         analyzers = Analyzer.objects.filter(gateway=gateway, type__in=analyzer_types)
 
         results = {
-            "Grid": {"total": 0.0, "values": []},
-            "Generator": {"total": 0.0, "values": []},
-            "Solar": {"total": 0.0, "values": []},
+            "Grid": {},
+            "Generator": {},
+            "Solar": {}
         }
 
-        for analyzer in analyzers:
-            latest_metadata = MetaData.objects.filter(analyzer=analyzer).order_by('-created_at').first()
+        # Today range
+        now = datetime.now()
+        start_of_day = make_aware(datetime(now.year, now.month, now.day, 0, 0, 0))
+        end_of_day = make_aware(now)
 
-            if latest_metadata:
+        for analyzer in analyzers:
+            # Get all today's metadata for analyzer
+            metadata_qs = MetaData.objects.filter(
+                analyzer=analyzer,
+                created_at__gte=start_of_day,
+                created_at__lte=end_of_day
+            ).order_by("created_at")
+
+            for metadata in metadata_qs:
                 for i in range(1, 21):
-                    name = getattr(latest_metadata, f"value{i}_name", None)
+                    name = getattr(metadata, f"value{i}_name", None)
                     if name and name.lower() == "active power":
-                        value = getattr(latest_metadata, f"value{i}_value", None)
+                        value = getattr(metadata, f"value{i}_value", None)
                         try:
                             float_value = float(value)
-                            results[analyzer.type]["values"].append({
-                                "analyzer": analyzer.name,
-                                "value": float_value,
-                                "time": latest_metadata.created_at.isoformat()
-                            })
-                            results[analyzer.type]["total"] += float_value
+                            timestamp = metadata.created_at.replace(microsecond=0).isoformat()
+
+                            if timestamp not in results[analyzer.type]:
+                                results[analyzer.type][timestamp] = 0.0
+                            results[analyzer.type][timestamp] += float_value
                         except (TypeError, ValueError):
                             continue
-                        break  # Found "active power", no need to check other value{i}
+                        break  # stop once active power is found
 
-        return JsonResponse({"latest_active_power": results}, status=200)
+        # Convert dicts → sorted lists (time, value)
+        formatted_results = {}
+        for key, values_dict in results.items():
+            formatted_results[key] = [
+                {"time": ts, "value": val} for ts, val in sorted(values_dict.items())
+            ]
+
+        return JsonResponse({"today_active_power": formatted_results}, status=200)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 
 
 @api_view(['GET'])
@@ -816,6 +831,8 @@ def Total_consumption(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def Grid_history(request):
