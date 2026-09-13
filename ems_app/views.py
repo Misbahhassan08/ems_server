@@ -1,5 +1,5 @@
 import uuid
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from datetime import datetime
 from django.forms import ValidationError
@@ -2571,6 +2571,61 @@ def assign_gateways_to_user(request):
             return JsonResponse({'error': str(e)}, status=400)
 
     return JsonResponse({'message': 'Invalid request method'}, status=405)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def unassign_gateway_from_user(request):
+    """Release one gateway from a user and return it to warehouse inventory."""
+    try:
+        data = json.loads(request.body)
+        gateway_id = data.get('gateway_id')
+        user_id = data.get('user_id')
+
+        if not gateway_id or not user_id:
+            return JsonResponse({'message': 'Gateway ID and User ID are required'}, status=400)
+
+        with transaction.atomic():
+            gateway = Gateways.objects.select_for_update().filter(G_id=gateway_id).first()
+            if not gateway:
+                return JsonResponse({'message': 'Gateway not found'}, status=404)
+
+            if gateway.user_id_id is None:
+                return JsonResponse({'message': 'Gateway is already unassigned'}, status=400)
+
+            if str(gateway.user_id_id) != str(user_id):
+                return JsonResponse({'message': 'Gateway is assigned to a different user'}, status=409)
+
+            previous_project_id = gateway.project_id
+            gateway.user_id = None
+            gateway.project = None
+            gateway.deploy_status = 'warehouse'
+            gateway.save(update_fields=['user_id', 'project', 'deploy_status'])
+
+            if previous_project_id:
+                project_is_active = Gateways.objects.filter(
+                    project_id=previous_project_id,
+                    deploy_status='deployed',
+                ).exists()
+                Project_Manager.objects.filter(PM_id=previous_project_id).update(
+                    is_active=project_is_active,
+                )
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Gateway unassigned successfully',
+            'gateway': {
+                'G_id': gateway.G_id,
+                'gateway_name': gateway.gateway_name,
+                'mac_address': gateway.mac_address,
+                'deploy_status': gateway.deploy_status,
+                'created_by_id': gateway.created_by_id,
+            },
+        }, status=200)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({'message': 'Invalid request data'}, status=400)
+    except Exception as error:
+        return JsonResponse({'error': str(error)}, status=400)
 
 
 @api_view(['GET'])

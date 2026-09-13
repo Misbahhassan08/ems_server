@@ -27,8 +27,8 @@ SECRET_KEY = "django-insecure-h8pki%_7ld!zf^^ro&y+a3)9f&6=v60-qdo%(o^+u1e6#1hitc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [ '*', 'ems-server-530056698.us-central1.run.app', 'ems-webapp-530056698.us-central1.run.app']
-CSRF_TRUSTED_ORIGINS = ['https://ems-webapp-530056698.us-central1.run.app']
+ALLOWED_HOSTS = [ '*', 'ems-server-530056698.us-central1.run.app', 'ems-webapp-530056698.us-central1.run.app','enervues.com']
+CSRF_TRUSTED_ORIGINS = ['https://enervues.com','https://ems-webapp-530056698.us-central1.run.app']
 #https://ems-webapp-530056698.us-central1.run.app/
 
 
@@ -117,22 +117,21 @@ WSGI_APPLICATION = "ems_project.wsgi.application"
 
 
 # #for localhost
- # #Get environment variables (these should be set in Cloud Run)
-INSTANCE_CONNECTION_NAME = "myprojectems-435411:us-central1:emsdb"  # Format: project:region:instance
-DB_USER = "misbah"
-DB_PASS = "?5@1D9:lA_ex6p(%"
-DB_NAME = "emsdb1"
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': DB_NAME,
-        'USER': DB_USER,
-        'PASSWORD': DB_PASS,
-        'HOST': f'/cloudsql/{INSTANCE_CONNECTION_NAME}',  # This tells Django to connect via UNIX socket
-        'PORT': '3306',
+        'NAME': os.getenv('DB_NAME', 'enervues_ems1'),
+        'USER': os.getenv('DB_USER', 'enervues_misbahdev'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'EMS@Dev24'),
+        'HOST': os.getenv('DB_HOST', '74.50.90.187'),
+        'PORT': os.getenv('DB_PORT', '3306'),
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
+
 
 
 

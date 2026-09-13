@@ -6,7 +6,7 @@ from . import views
 from .views import create_user , create_project , login_user , get_user_data , total_uers ,get_latest_project_data,latest_project_data , add_hardware , hardware_count , connected_hardware_count, Total_load , Grid_history, Solar_history, Generator_history, Total_consumption, Last7Days_Energy_Summary
 from .views import user_project ,fetching_users , delete_user ,update_user , fetch_Hardware , update_hardware , delete_hardware , delete_selected_user, delete_selected_hardware , Create_Project_Manager ,Fetch_Projects,total_hardware_count,total_connected_hardware,total_project,fetches_total_hardware
 from .views import active_project , fetch_assigned_hardware, fetch_all_projects,logout_user, create_box , get_boxes,create_Gateways , fetch_gateway , fetch_value_data,fetch_device_data,fetch_whole_device_data,fetch_all_gateways,create_gateway,get_analyzers_by_gateway,create_analyzer,Get_Project_Manager,create_ports,fetch_ports,fetch_analyzers_by_port,get_all_gateways
-from .views import Get_All_Projects , get_unassigned_gateways,assign_gateways_to_user,fetch_gateways_of_user,fetch_gateways_of_usersList,assign_gateway_to_project,get_gateways_for_project,update_gateway,fetch_deployed_gateways_of_user,create_metadata,get_metadata,get_analyzer_value_data,get_total_gateways,get_deployed_gateways,get_user_aloted_gateways,post_metadata, fetch_metadata,fetch_highchart_data,analyzer_values,fetch_deployed_gateways_name_mac
+from .views import Get_All_Projects , get_unassigned_gateways,assign_gateways_to_user,unassign_gateway_from_user,fetch_gateways_of_user,fetch_gateways_of_usersList,assign_gateway_to_project,get_gateways_for_project,update_gateway,fetch_deployed_gateways_of_user,create_metadata,get_metadata,get_analyzer_value_data,get_total_gateways,get_deployed_gateways,get_user_aloted_gateways,post_metadata, fetch_metadata,fetch_highchart_data,analyzer_values,fetch_deployed_gateways_name_mac
 from .views import get_power_data, invoice_api, total_projecta, get_deployed_gateway_count, Get_superAdmin_Project_Count,fetch_single_highchart_data, edit_project_manager, sum_ep_plus_values, Grid_import, Solar_import, Generator_import, Grid_export, Solar_Project, Grid_export_project, Grid_Project, Generator_project
 from .views import total_admin, admin_detail, total_project_user, get_total_gateways_user, admin_detail_superadmin, create_or_update_subscription, create_admin, create_admincr, create_superadmincr, fetching_user, Get_User_Project_Count, Load_Project, selected_analyzer_data, energy_import_export_last_10_days
 from .views import  get_unassigned_users, assign_user_to_admin, get_admin_users, Total_consumption_activepower
@@ -81,6 +81,7 @@ urlpatterns = [
     path('get_all_gateways/',get_all_gateways,name='get_all_gateways'),
     path('get_unassigned_gateways/',get_unassigned_gateways,name='get_unassigned_gateways'),
     path('assign_gateways_to_user/',assign_gateways_to_user,name='assign_gateways_to_user'),
+    path('unassign_gateway_from_user/',unassign_gateway_from_user,name='unassign_gateway_from_user'),
     path('fetch_gateways_of_user/',fetch_gateways_of_user,name='fetch_gateways_of_user'),
     path('fetch_gateways_of_usersList/',fetch_gateways_of_usersList,name='fetch_gateways_of_usersList'),
     path('assign_gateway_to_project/', assign_gateway_to_project, name='assign_gateway_to_project'),
